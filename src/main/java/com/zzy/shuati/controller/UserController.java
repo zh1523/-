@@ -21,6 +21,7 @@ import com.zzy.shuati.model.vo.LoginUserVO;
 import com.zzy.shuati.model.vo.UserVO;
 import com.zzy.shuati.service.UserService;
 
+import java.time.LocalDate;
 import java.util.List;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -316,5 +317,29 @@ public class UserController {
         boolean result = userService.updateById(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
+    }
+
+    /**
+     * 添加用户签到
+     * @param request
+     * @return 今天是否已经签到
+     */
+    @PostMapping("/add/sign")
+    public BaseResponse<Boolean> addUserSignIn(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        boolean res = userService.addUserSignIn(loginUser.getId());
+        return ResultUtils.success(res);
+    }
+
+    /**
+     * 查询用户签到
+     * @param request
+     * @return 用户在第x天签到的集合[12,22,23，xxx]，第x天从一年第一天开始算
+     */
+    @GetMapping("/get/sign")
+    public BaseResponse<List<Integer>> getUserSignIn(HttpServletRequest request,Integer year) {
+        User loginUser = userService.getLoginUser(request);
+        List<Integer> userSignIn = userService.getUserSignIn(loginUser.getId(), year);
+        return ResultUtils.success(userSignIn);
     }
 }

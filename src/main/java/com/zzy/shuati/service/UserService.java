@@ -118,4 +118,19 @@ public interface UserService extends IService<User> {
      */
     QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
 
+    /**
+     * 添加用户签到
+     *
+     * @param userID
+     * @return 今天是否已经签到
+     */
+    boolean addUserSignIn(Long userID);
+
+    /**
+     * 查询用户签到
+     *
+     * @param userID,year
+     * @return 用户在第x天签到的集合[12,22,23]，第x天从一年第一天开始算
+     */
+    List<Integer> getUserSignIn(Long userID,Integer year);
 }

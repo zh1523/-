@@ -3,10 +3,13 @@ package com.zzy.shuati.service.impl;
 import static com.zzy.shuati.constant.UserConstant.USER_LOGIN_STATE;
 
 import cn.hutool.core.collection.CollUtil;
+import co.elastic.clients.elasticsearch.nodes.Ingest;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.zzy.shuati.common.ErrorCode;
+import com.zzy.shuati.config.RedissonConfig;
 import com.zzy.shuati.constant.CommonConstant;
+import com.zzy.shuati.constant.RedisConstant;
 import com.zzy.shuati.exception.BusinessException;
 import com.zzy.shuati.mapper.UserMapper;
 import com.zzy.shuati.model.dto.user.UserQueryRequest;
@@ -16,13 +19,21 @@ import com.zzy.shuati.model.vo.LoginUserVO;
 import com.zzy.shuati.model.vo.UserVO;
 import com.zzy.shuati.service.UserService;
 import com.zzy.shuati.utils.SqlUtils;
+
+import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
+import java.util.BitSet;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
 import org.apache.commons.lang3.StringUtils;
+import org.redisson.api.RBitSet;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
@@ -36,11 +47,17 @@ import org.springframework.util.DigestUtils;
 @Service
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
-
+    @Resource
+    private RedissonClient redissonClient;
     /**
      * 盐值，混淆密码
      */
     public static final String SALT = "yupi";
+    private final RedissonConfig redissonConfig;
+
+    public UserServiceImpl(RedissonConfig redissonConfig) {
+        this.redissonConfig = redissonConfig;
+    }
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -268,5 +285,43 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
                 sortField);
         return queryWrapper;
+    }
+
+    @Override
+    public boolean addUserSignIn(Long userID) {
+        LocalDate date=LocalDate.now();
+        String key= RedisConstant.getUserSignInRedisKey(date.getYear(),userID);
+        //今天是今年的第几天
+        int offset=date.getDayOfYear();
+        //bitset是一年天数位数的二进制值
+        RBitSet bitSet = redissonClient.getBitSet(key);
+        //如果没签到,false
+        //这里即时没有key也会返回一个空对象
+        if(!bitSet.get(offset)){
+            return bitSet.set(offset);
+        }
+        //已经签到
+        return true;
+    }
+
+    @Override
+    public List<Integer> getUserSignIn(Long userID, Integer year) {
+        //year为空默认为今年
+        if(year==null){
+            year=LocalDate.now().getYear();
+        }
+        String key = RedisConstant.getUserSignInRedisKey(year, userID);
+        RBitSet signBitSet = redissonClient.getBitSet(key);
+        //将bitset读入内存避免循环时每次调用redissonclient
+        BitSet bitSet = signBitSet.asBitSet();
+        //结果集合
+        List<Integer> daylist=new ArrayList<>();
+        int totalDays= Year.of(year).length();
+        for(int i=0;i<totalDays;i++){
+            if(bitSet.get(i)){
+                daylist.add(i);
+            }
+        }
+        return daylist;
     }
 }
