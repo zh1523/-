@@ -12,7 +12,7 @@ import javax.servlet.http.HttpServletRequest;
 /**
  * 题目服务
  *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
+ * 
  * @from <a href="https://www.code-nav.cn">编程导航学习圈</a>
  */
 public interface QuestionService extends IService<Question> {
@@ -56,4 +56,11 @@ public interface QuestionService extends IService<Question> {
      * @return
      */
     Page<Question> listQuestionByPage(QuestionQueryRequest questionQueryRequest);
+
+    /**
+     * 使用es搜索题目
+     * @param questionQueryRequest
+     * @return
+     */
+    Page<Question> listFromEs(QuestionQueryRequest questionQueryRequest);
 }

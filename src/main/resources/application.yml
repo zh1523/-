@@ -1,6 +1,6 @@
 # 公共配置文件
-# @author <a href="https://github.com/liyupi">程序员鱼皮</a>
-# @from <a href="https://yupi.icu">编程导航知识星球</a>
+# 
+# 
 spring:
   application:
     name: shuati-back
@@ -59,7 +59,6 @@ mybatis-plus:
 # 微信相关
 wx:
   # 微信公众平台
-  # todo 需替换配置
   mp:
     token: xxx
     aesKey: xxx
@@ -73,12 +72,10 @@ wx:
         port: 6379
       type: Memory
   # 微信开放平台
-  # todo 需替换配置
   open:
     appId: xxx
     appSecret: xxx
 # 对象存储
-# todo 需替换配置
 cos:
   client:
     accessKey: xxx

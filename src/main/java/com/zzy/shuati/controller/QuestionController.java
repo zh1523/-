@@ -30,7 +30,7 @@ import java.util.List;
 /**
  * 题目接口
  *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
+ * 
  * @from <a href="https://www.code-nav.cn">编程导航学习圈</a>
  */
 @RestController
@@ -251,6 +251,19 @@ public class QuestionController {
         boolean result = questionService.updateById(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         return ResultUtils.success(true);
+    }
+
+    /**
+     * es搜索题目
+     * @param questionQueryRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/search/page/vo")
+    public BaseResponse<Page<QuestionVO>> searchQuestionVOByPage(@RequestBody QuestionQueryRequest questionQueryRequest,
+                                                                 HttpServletRequest request) {
+        Page<Question> questionPage = questionService.listFromEs(questionQueryRequest);
+        return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
 
     // endregion

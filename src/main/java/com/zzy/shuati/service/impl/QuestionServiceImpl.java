@@ -10,6 +10,7 @@ import com.zzy.shuati.common.ErrorCode;
 import com.zzy.shuati.constant.CommonConstant;
 import com.zzy.shuati.exception.ThrowUtils;
 import com.zzy.shuati.mapper.QuestionMapper;
+import com.zzy.shuati.model.dto.question.QuestionEsDTO;
 import com.zzy.shuati.model.dto.question.QuestionQueryRequest;
 import com.zzy.shuati.model.entity.Question;
 import com.zzy.shuati.model.entity.QuestionBankQuestion;
@@ -23,20 +24,28 @@ import com.zzy.shuati.utils.SqlUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.search.sort.SortBuilder;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.elasticsearch.core.ElasticsearchRestTemplate;
+import org.springframework.data.elasticsearch.core.SearchHit;
+import org.springframework.data.elasticsearch.core.SearchHits;
+import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
+import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
  * 题目服务实现
  *
- * @author <a href="https://github.com/liyupi">程序员鱼皮</a>
+ *
  * @from <a href="https://www.code-nav.cn">编程导航学习圈</a>
  */
 @Service
@@ -48,6 +57,9 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
     @Resource
     private QuestionBankQuestionService questionBankQuestionService;
+
+    @Resource
+    private ElasticsearchRestTemplate elasticsearchRestTemplate;
 
     /**
      * 校验数据
@@ -225,6 +237,86 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
 
         //执行查询
         Page<Question> page = this.page(new Page<>(current, size), queryWrapper);
+        return page;
+    }
+
+    @Override
+    public Page<Question> listFromEs(QuestionQueryRequest questionQueryRequest) {
+        // 获取参数
+        Long id = questionQueryRequest.getId();
+        Long notId = questionQueryRequest.getNotId();
+        String searchText = questionQueryRequest.getSearchText();
+        List<String> tags = questionQueryRequest.getTags();
+        Long questionBankId = questionQueryRequest.getQuestionBankId();
+        Long userId = questionQueryRequest.getUserId();
+        // ES 的起始页为 0
+        int current = questionQueryRequest.getCurrent() - 1;
+        int pageSize = questionQueryRequest.getPageSize();
+        String sortField = questionQueryRequest.getSortField();
+        String sortOrder = questionQueryRequest.getSortOrder();
+
+        //构造查询条件,boolquery用于组合多个条件相当于dsl的bool,
+        //filter,must,mustnot,should
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+        //设置查询条件
+        boolQueryBuilder.filter(QueryBuilders.termQuery("isDelete", 0));
+        if(id!=null) {
+            //term,match等等和dsl对应
+            boolQueryBuilder.must(QueryBuilders.termQuery("id", id));
+        }
+        if (notId != null) {
+            boolQueryBuilder.mustNot(QueryBuilders.termQuery("id", notId));
+        }
+        if (userId != null) {
+            boolQueryBuilder.filter(QueryBuilders.termQuery("userId", userId));
+        }
+        if (questionBankId != null) {
+            boolQueryBuilder.filter(QueryBuilders.termQuery("questionBankId", questionBankId));
+        }
+        // 包含部分标签
+        if (CollUtil.isNotEmpty(tags)) {
+            for (String tag : tags) {
+                boolQueryBuilder.should(QueryBuilders.termQuery("tags", tag));
+            }
+            boolQueryBuilder.minimumShouldMatch(1);
+        }
+        // 按关键词检索
+        //should相当于or,至少满足一个
+        if (StringUtils.isNotBlank(searchText)) {
+            boolQueryBuilder.should(QueryBuilders.matchQuery("title", searchText));
+            boolQueryBuilder.should(QueryBuilders.matchQuery("content", searchText));
+            boolQueryBuilder.should(QueryBuilders.matchQuery("answer", searchText));
+            boolQueryBuilder.minimumShouldMatch(1);
+        }
+        // 排序,设置按什么字段排序fieldsort,order按升或降（asc,desc
+        SortBuilder<?> sortBuilder = SortBuilders.scoreSort();
+        if (StringUtils.isNotBlank(sortField)) {
+            sortBuilder = SortBuilders.fieldSort(sortField);
+            sortBuilder.order(CommonConstant.SORT_ORDER_ASC.equals(sortOrder) ? SortOrder.ASC : SortOrder.DESC);
+        }
+        // 分页
+        PageRequest pageRequest = PageRequest.of(current, pageSize);
+        // 构造查询
+        NativeSearchQuery searchQuery = new NativeSearchQueryBuilder()
+                .withQuery(boolQueryBuilder)
+                .withPageable(pageRequest)
+                .withSorts(sortBuilder)
+                .build();
+        //复杂的查询用temple，一般用字段映射
+        //执行查询
+        SearchHits<QuestionEsDTO> searchHits = elasticsearchRestTemplate.search(searchQuery, QuestionEsDTO.class);
+        // 复用 MySQL 的分页对象，封装返回结果
+        Page<Question> page = new Page<>();
+        page.setTotal(searchHits.getTotalHits());
+        List<Question> resourceList = new ArrayList<>();
+        if (searchHits.hasSearchHits()) {
+            //注意list的泛型时hit不是hits
+            List<SearchHit<QuestionEsDTO>> searchHitList = searchHits.getSearchHits();
+            for (SearchHit<QuestionEsDTO> questionEsDTOSearchHit : searchHitList) {
+                resourceList.add(QuestionEsDTO.dtoToObj(questionEsDTOSearchHit.getContent()));
+            }
+        }
+        page.setRecords(resourceList);
         return page;
     }
 }
