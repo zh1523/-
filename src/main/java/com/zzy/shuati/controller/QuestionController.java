@@ -10,10 +10,7 @@ import com.zzy.shuati.common.ResultUtils;
 import com.zzy.shuati.constant.UserConstant;
 import com.zzy.shuati.exception.BusinessException;
 import com.zzy.shuati.exception.ThrowUtils;
-import com.zzy.shuati.model.dto.question.QuestionAddRequest;
-import com.zzy.shuati.model.dto.question.QuestionEditRequest;
-import com.zzy.shuati.model.dto.question.QuestionQueryRequest;
-import com.zzy.shuati.model.dto.question.QuestionUpdateRequest;
+import com.zzy.shuati.model.dto.question.*;
 import com.zzy.shuati.model.entity.Question;
 import com.zzy.shuati.model.entity.User;
 import com.zzy.shuati.model.vo.QuestionVO;
@@ -266,5 +263,18 @@ public class QuestionController {
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
 
-    // endregion
+    /**
+     * 批量删除题目
+     * @param questionBatchRemoveRequest
+     * @param request
+     * @return
+     */
+    @PostMapping("/delete/batch")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> batchDeleteQuestions(@RequestBody QuestionBatchRemoveRequest questionBatchRemoveRequest,
+                                                      HttpServletRequest request) {
+        ThrowUtils.throwIf(questionBatchRemoveRequest == null, ErrorCode.PARAMS_ERROR);
+        questionService.batchRemoveQuestions(questionBatchRemoveRequest.getQuestionIdList());
+        return ResultUtils.success(true);
+    }
 }

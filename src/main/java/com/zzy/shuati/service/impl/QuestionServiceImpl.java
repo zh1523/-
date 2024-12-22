@@ -36,6 +36,7 @@ import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQuery;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -240,6 +241,11 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         return page;
     }
 
+    /**
+     * es查询，should最好加上至少匹配1个的函数，否则只有should时会查询全部
+     * @param questionQueryRequest
+     * @return
+     */
     @Override
     public Page<Question> listFromEs(QuestionQueryRequest questionQueryRequest) {
         // 获取参数
@@ -274,6 +280,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
             boolQueryBuilder.filter(QueryBuilders.termQuery("questionBankId", questionBankId));
         }
         // 包含部分标签
+
         if (CollUtil.isNotEmpty(tags)) {
             for (String tag : tags) {
                 boolQueryBuilder.should(QueryBuilders.termQuery("tags", tag));
@@ -302,7 +309,6 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
                 .withPageable(pageRequest)
                 .withSorts(sortBuilder)
                 .build();
-        //复杂的查询用temple，一般用字段映射
         //执行查询
         SearchHits<QuestionEsDTO> searchHits = elasticsearchRestTemplate.search(searchQuery, QuestionEsDTO.class);
         // 复用 MySQL 的分页对象，封装返回结果
@@ -318,5 +324,25 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question> i
         }
         page.setRecords(resourceList);
         return page;
+    }
+
+    /**
+     * 批量删除题目
+     * @param questionIds
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchRemoveQuestions(List<Long> questionIds) {
+        ThrowUtils.throwIf(CollUtil.isEmpty(questionIds),ErrorCode.PARAMS_ERROR,"题目为空");
+        for(Long questionId : questionIds) {
+            //删除题目
+            boolean res = this.removeById(questionId);
+            ThrowUtils.throwIf(!res,ErrorCode.OPERATION_ERROR,"题目删除失败");
+            //删除题目题库关联表
+            LambdaQueryWrapper<QuestionBankQuestion> lambdaQueryWrapper = new LambdaQueryWrapper<>();
+            lambdaQueryWrapper.eq(QuestionBankQuestion::getQuestionId,questionId);
+            boolean res2 = questionBankQuestionService.remove(lambdaQueryWrapper);
+            ThrowUtils.throwIf(!res2,ErrorCode.OPERATION_ERROR,"题目题库关联删除失败");
+        }
     }
 }
